@@ -1,7 +1,26 @@
 S2MM data receiving application for Petalinux
 
 MM2S is not in use.
-There is some problem because after start output has no descriptor change as expected
+To build use arm-linux-gnueabi-gcc dataproc.c -o dataproc -static
+
+Script for quick upload to board
+```console
+#!/bin/bash
+
+cd my
+#petalinux-build -c dataproc
+cd /home/bulkin/FPGA/petalinux/my/project-spec/meta-user/recipes-apps/dataproc/files
+arm-linux-gnueabi-gcc dataproc.c -o dataproc -static
+
+#read  -n 1 -p "----------READY FOR UPLOAD---------" mainmenuinput
+
+#ssh-keygen -f "/home/bulkin/.ssh/known_hosts" -R "192.168.1.4"
+
+sshpass -p root scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r ./dataproc root@192.168.1.3:/dataproc
+
+sshpass -p root ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@192.168.1.3
+```
+
 
 Vivado design memory map:
 
@@ -13,50 +32,58 @@ Vivado design memory map:
 
 
 
-
 Console output:
 
 ```console
-START
-nmaps are done
-s2mm-register memory with zeros is DONE
-reset and halt all dma operations is DONE
-build s2mm stream and control stream is DONE
-S2MM_CURDESC is 0x00000000
-S2MM_CURDESC SET 0x22000000
-S2MM_TAILDESC 0x00000000
-S2MM_TAILDESC SET 0x22000180
-wait until all transfers finished
-Stream to memory-mapped status (0x00014509@0x34):
+root@my:/# ./dataproc 
+Please, enter number of descriptors: 4
+FOR 0 set BUFFER start 0x12020000
+FOR 1 set BUFFER start 0x1281ffff
+FOR 2 set BUFFER start 0x1301fffe
+FOR 3 set BUFFER start 0x1381fffd
+Stream to memory-mapped status (0x00010008@0x34):
 S2MM_STATUS_REGISTER status register values:
- halted SGIncld SGIntErr SGDecErr Err_Irq curdesc 0x22000000
-Stream to memory-mapped status (0x00014509@0x34):
+ running SGIncld
+0) Descriptor Status: 0x8c0000e0
+        BUFFER ADDR: 0x12020000;
+        Cmplt: 0;       RXSOF: 8000000;
+        RXEOF: 4000000; BFLEN: 224 bytes;
+1) Descriptor Status: 0x880000f9
+        BUFFER ADDR: 0x1281ffff;
+        Cmplt: 0;       RXSOF: 8000000;
+        RXEOF: 0;       BFLEN: 249 bytes;
+2) Descriptor Status: 0x800001f3
+        BUFFER ADDR: 0x1301fffe;
+        Cmplt: 0;       RXSOF: 0;
+        RXEOF: 0;       BFLEN: 499 bytes;
+3) Descriptor Status: 0x800002ee
+        BUFFER ADDR: 0x1381fffd;
+        Cmplt: 0;       RXSOF: 0;
+        RXEOF: 0;       BFLEN: 750 bytes;
+1352534998 694875763 694875764 694875765 694875766 694850482 694916004 694916005 694916006 694916007 694916008 694916009 694916010 694916011 694916012 694916013 694916014 694916015 694916016 694916017 694916018 694916019 694916020 694916021 694916022 694916023 694916024 694916025 694916026 694916027 694916028 694916029 
+Stream to memory-mapped status (0x0001100a@0x34):
 S2MM_STATUS_REGISTER status register values:
- halted SGIncld SGIntErr SGDecErr Err_Irq curdesc 0x22000000
-Stream to memory-mapped status (0x00014509@0x34):
-S2MM_STATUS_REGISTER status register values:
- halted SGIncld SGIntErr SGDecErr Err_Irq curdesc 0x22000000
-Stream to memory-mapped status (0x00014509@0x34):
-S2MM_STATUS_REGISTER status register values:
- halted SGIncld SGIntErr SGDecErr Err_Irq curdesc 0x22000000
-Stream to memory-mapped status (0x00014509@0x34):
-S2MM_STATUS_REGISTER status register values:
- halted SGIncld SGIntErr SGDecErr Err_Irq curdesc 0x22000000
-Stream to memory-mapped status (0x00014509@0x34):
-S2MM_STATUS_REGISTER status register values:
- halted SGIncld SGIntErr SGDecErr Err_Irq curdesc 0x22000000
-Stream to memory-mapped status (0x00014509@0x34):
-S2MM_STATUS_REGISTER status register values:
- halted SGIncld SGIntErr SGDecErr Err_Irq curdesc 0x22000000
-Stream to memory-mapped status (0x00014509@0x34):
-S2MM_STATUS_REGISTER status register values:
- halted SGIncld SGIntErr SGDecErr Err_Irq curdesc 0x22000000
- ```
+ running idle SGIncld IOC_Irq
+0) Descriptor Status: 0x8c0000e0
+        BUFFER ADDR: 0x12020000;
+        Cmplt: 0;       RXSOF: 8000000;
+        RXEOF: 4000000; BFLEN: 224 bytes;
+1) Descriptor Status: 0x880000f9
+        BUFFER ADDR: 0x1281ffff;
+        Cmplt: 0;       RXSOF: 8000000;
+        RXEOF: 0;       BFLEN: 249 bytes;
+2) Descriptor Status: 0x800001f3
+        BUFFER ADDR: 0x1301fffe;
+        Cmplt: 0;       RXSOF: 0;
+        RXEOF: 0;       BFLEN: 499 bytes;
+3) Descriptor Status: 0x800002ee
+        BUFFER ADDR: 0x1381fffd;
+        Cmplt: 0;       RXSOF: 0;
+        RXEOF: 0;       BFLEN: 750 bytes;
+1352534998 694875763 694875764 694875765 694875766 694850482 694916004 694916005 694916006 694916007 694916008 694916009 694916010 694916011 694916012 694916013 694916014 694916015 694916016 694916017 694916018 694916019 694916020 694916021 694916022 694916023 694916024 694916025 694916026 694916027 694916028 694916029 
+```
 
-Vivado messages:
-```
-[BD 41-1289] Cannot find slave segment </PSys/S_AXI_HP1/HP1_DDR_LOWOCM>. Cannot create segment <SEG_PSys_HP1_DDR_LOWOCM> at <0x0000_0000 [ 512M ]> in Address Space </axi_dma_0/Data_MM2S>.
-```
+We can see increment counter from datasource of FPGA
 
 Vivado blockdesign:
 ![image](https://user-images.githubusercontent.com/2908600/219812215-5c07d015-7dae-495d-91a6-dd16068c52da.png)

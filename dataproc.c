@@ -46,116 +46,55 @@
 #define	AXI_DMA_BASEADDR            0x40400000 //AXI DMA Register Address Map
 #define	DESCRIPTOR_REGISTERS_SIZE   0x10000
 #define	SG_DMA_DESCRIPTORS_WIDTH    0x1FFFF
-#define	MEMBLOCK_WIDTH              0x1FFFFFF  //?size? of mem used by s2mm and mm2s
+
+#define	MEMBLOCK_WIDTH              0x1FFFFFF  //?size? of mem used by s2mm 
 #define	BUFFER_BLOCK_WIDTH          0x7FFFFF   // size of memory block per descriptor in bytes
-#define DEST_MEM_BLOCK				      0x6400000 
+#define DEST_MEM_BLOCK				0x6400000 
 
 #define	HP0_DMA_BUFFER_MEM_ADDRESS       0x10000000
-#define	HP0_MM2S_DMA_BASE_MEM_ADDRESS    (HP0_DMA_BUFFER_MEM_ADDRESS)
-#define	HP0_S2MM_DMA_BASE_MEM_ADDRESS    (HP0_DMA_BUFFER_MEM_ADDRESS +    \
-										                      MEMBLOCK_WIDTH + 1)
-#define	HP0_MM2S_DMA_DESCRIPTORS_ADDRESS (HP0_MM2S_DMA_BASE_MEM_ADDRESS)
+//#define	HP0_MM2S_DMA_BASE_MEM_ADDRESS    (HP0_DMA_BUFFER_MEM_ADDRESS)
+#define	HP0_S2MM_DMA_BASE_MEM_ADDRESS    (HP0_DMA_BUFFER_MEM_ADDRESS + MEMBLOCK_WIDTH + 1)
+//#define	HP0_MM2S_DMA_DESCRIPTORS_ADDRESS (HP0_MM2S_DMA_BASE_MEM_ADDRESS)
 #define	HP0_S2MM_DMA_DESCRIPTORS_ADDRESS (HP0_S2MM_DMA_BASE_MEM_ADDRESS)
-#define	HP0_MM2S_SOURCE_MEM_ADDRESS      (HP0_MM2S_DMA_BASE_MEM_ADDRESS + \
-										                      SG_DMA_DESCRIPTORS_WIDTH + 1)
-#define	HP0_S2MM_TARGET_MEM_ADDRESS      (HP0_S2MM_DMA_BASE_MEM_ADDRESS + \
-										                      SG_DMA_DESCRIPTORS_WIDTH + 1)
+//#define	HP0_MM2S_SOURCE_MEM_ADDRESS      (HP0_MM2S_DMA_BASE_MEM_ADDRESS + SG_DMA_DESCRIPTORS_WIDTH + 1)
+#define	HP0_S2MM_TARGET_MEM_ADDRESS      (HP0_S2MM_DMA_BASE_MEM_ADDRESS + SG_DMA_DESCRIPTORS_WIDTH + 1)
 
-
-static void dma_set(unsigned int *address, off_t offset, unsigned int value);
-static int  dma_get(unsigned int *address, off_t offset);
-
-
-int main(void) {
-	int 	      fd;
-	int           num_descr    = 0;
-
-	printf("Please, enter number of descriptors: ");
-	scanf("%d", &num_descr);
-
-	fd = open("/dev/mem", O_RDWR | O_SYNC);
-	if (fd < 0) {
-		fprintf(stderr, "<E>: Couldn't open /dev/mem: %s\r\n", strerror(errno));		
-		exit(-1);
-	}
-
-	// Mapped memory from phy to virt for work with DMA without Linux drivers
-	unsigned int *axi_dma_vrt = mmap(NULL, DESCRIPTOR_REGISTERS_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, AXI_DMA_BASEADDR);
-	if (axi_dma_vrt == MAP_FAILED) {
-		fprintf(stderr, "<E>: Couldn't mapped memory for AXI DMA: %s\r\n", strerror(errno));
-		close(fd);
-		return -1;
-	}
-
-	// mapped memory for S2MM descriptors
-	unsigned int *s2mm_descr_reg_mmap = mmap(NULL, DESCRIPTOR_REGISTERS_SIZE,
-						 PROT_READ | PROT_WRITE,
-						 MAP_SHARED, fd,
-						 HP0_S2MM_DMA_DESCRIPTORS_ADDRESS);
-	if (s2mm_descr_reg_mmap == MAP_FAILED) {
-		fprintf(stderr, "<E>: Couldn't mapped memory for AXI DMA: %s\r\n",
-				strerror(errno));
-		close(fd);
-		return -1;
-	}
-
-	unsigned int *dest_mem_map = mmap(NULL, DEST_MEM_BLOCK,
-					  PROT_READ | PROT_WRITE, MAP_SHARED, fd,
-					  (off_t) (HP0_S2MM_TARGET_MEM_ADDRESS));
-	if (dest_mem_map == MAP_FAILED) {
-		fprintf(stderr, "<E>: Couldn't mapped memory for destination block: %s\r\n",
-				strerror(errno));
-		close(fd);
-		return -1;
-	}
-
-	// fill s2mm-register memory with zeros
-	memset(s2mm_descr_reg_mmap, 0, DESCRIPTOR_REGISTERS_SIZE);
-	memset(dest_mem_map, 0, DEST_MEM_BLOCK);
-
-	dma_reset(axi_dma_vrt);		// Reset AXI DMA
-
-	uint32_t s2mm_curr_descr_addr = HP0_S2MM_DMA_DESCRIPTORS_ADDRESS;
-	dma_descr_set(s2mm_descr_reg_mmap, num_descr);
-	uint32_t s2mm_tail_descr_addr = HP0_S2MM_DMA_DESCRIPTORS_ADDRESS + (num_descr * 0x40 - 0x40);
-
-	dma_set(axi_dma_vrt, S2MM_CURDESC,  s2mm_curr_descr_addr);
-	dma_set(axi_dma_vrt, S2MM_CONTROL_REGISTER, 0x01);
-	dma_set(axi_dma_vrt, S2MM_TAILDESC, s2mm_tail_descr_addr);
-
-	int ctrl_reg_ok = 0, s2mm_status;
-	while (!ctrl_reg_ok) {
-		s2mm_status = dma_get(axi_dma_vrt, S2MM_STATUS_REGISTER);
-		ctrl_reg_ok = (s2mm_status & 0x00001000);
-		printf("Stream to memory-mapped status (0x%08x@0x%02x):\n", s2mm_status, S2MM_STATUS_REGISTER);
-		printf("S2MM_STATUS_REGISTER status register values:\n");
-
-		if (s2mm_status & 0x00000001) printf(" halted");
-		else		    	          printf(" running");
-		if (s2mm_status & 0x00000002) printf(" idle");
-		if (s2mm_status & 0x00000008) printf(" SGIncld");
-		if (s2mm_status & 0x00000010) printf(" DMAIntErr");
-		if (s2mm_status & 0x00000020) printf(" DMASlvErr");
-		if (s2mm_status & 0x00000040) printf(" DMADecErr");
-		if (s2mm_status & 0x00000100) printf(" SGIntErr");
-		if (s2mm_status & 0x00000200) printf(" SGSlvErr");
-		if (s2mm_status & 0x00000400) printf(" SGDecErr");
-		if (s2mm_status & 0x00001000) printf(" IOC_Irq");
-		if (s2mm_status & 0x00002000) printf(" Dly_Irq");
-		if (s2mm_status & 0x00004000) printf(" Err_Irq");
-		printf("\n");
-		dma_descr_scan(s2mm_descr_reg_mmap, num_descr);
-	}
-
-	munmap(axi_dma_vrt,  DESCRIPTOR_REGISTERS_SIZE);
-	munmap(s2mm_descr_reg_mmap, DESCRIPTOR_REGISTERS_SIZE);
-	munmap(dest_mem_map, DEST_MEM_BLOCK);
-
-	close(fd);
-
-	return 0;
+void delay(int number_of_ms)
+{
+    // Converting time into milli_seconds
+    int mk_seconds = 1000 * number_of_ms;
+ 
+    // Storing start time
+    clock_t start_time = clock();
+ 
+    // looping till required time is not achieved
+    while (clock() < start_time + mk_seconds)
+        ;
 }
 
+void print_mem(void *virtual_address, int count)
+{
+	//char *data_ptr = virtual_address;
+	u_int32_t *data_ptr = virtual_address;
+
+	for(int i = 0; i < count; i ++){
+		//printf("%02X ", data_ptr[i]);
+		//printf("%ld", data_ptr[i]);
+
+		// print a space every 4 bytes (0 indexed)
+		//if(i%4==3){
+		//	printf(" | ");
+		//}
+
+		printf("%li ", (uint32_t)data_ptr[i]);
+		
+	}
+
+	printf("\n");
+}
+
+//static void dma_set(unsigned int *address, off_t offset, unsigned int value);
+//static int  dma_get(unsigned int *address, off_t offset);
 
 /**
  * @brief  Settings s2mm descriptors;
@@ -174,26 +113,24 @@ void dma_descr_set(unsigned int *s2mm_descr_vrt_addr, int num_descr) {
     int                i;
 
     for (i = 0; i < num_descr; i++) {
-	offset_nxtdesc   = offset * i;
-	offset_buff_addr = BUFFER_BLOCK_WIDTH * i;
+		offset_nxtdesc   = offset * i;
+		offset_buff_addr = BUFFER_BLOCK_WIDTH * i;
 
-	dma_set(s2mm_descr_vrt_addr, NXTDESC + offset_nxtdesc,
-		HP0_S2MM_DMA_DESCRIPTORS_ADDRESS + offset_nxtdesc + offset);
-	dma_set(s2mm_descr_vrt_addr, BUFFER_ADDRESS + offset_nxtdesc,
-		HP0_S2MM_TARGET_MEM_ADDRESS + offset_buff_addr);
-	if (i == 0) {
-	    dma_set(s2mm_descr_vrt_addr, CONTROL + offset_nxtdesc,
-	            0x0000000 | BUFFER_BLOCK_WIDTH);
-	}
-	else if (i == (num_descr - 1)) {
-	    dma_set(s2mm_descr_vrt_addr, NXTDESC + offset_nxtdesc,
-	  	    HP0_S2MM_DMA_DESCRIPTORS_ADDRESS);
-	    dma_set(s2mm_descr_vrt_addr, CONTROL + offset_nxtdesc,
-		    0x0000000 | BUFFER_BLOCK_WIDTH);
-	}
-	else
-	    dma_set(s2mm_descr_vrt_addr, CONTROL + offset_nxtdesc,
-	            BUFFER_BLOCK_WIDTH);
+		dma_set(s2mm_descr_vrt_addr, NXTDESC + offset_nxtdesc, HP0_S2MM_DMA_DESCRIPTORS_ADDRESS + offset_nxtdesc + offset);
+
+		printf("FOR %i set BUFFER start 0x%08x\r\n", i, HP0_S2MM_TARGET_MEM_ADDRESS + offset_buff_addr);
+
+		dma_set(s2mm_descr_vrt_addr, BUFFER_ADDRESS + offset_nxtdesc, HP0_S2MM_TARGET_MEM_ADDRESS + offset_buff_addr);
+
+		if (i == 0) {
+			dma_set(s2mm_descr_vrt_addr, CONTROL + offset_nxtdesc, 0x0000000 | BUFFER_BLOCK_WIDTH);
+		}
+		else if (i == (num_descr - 1)) {
+			dma_set(s2mm_descr_vrt_addr, NXTDESC + offset_nxtdesc, HP0_S2MM_DMA_DESCRIPTORS_ADDRESS);
+			dma_set(s2mm_descr_vrt_addr, CONTROL + offset_nxtdesc, 0x0000000 | BUFFER_BLOCK_WIDTH);
+		}
+		else
+			dma_set(s2mm_descr_vrt_addr, CONTROL + offset_nxtdesc, BUFFER_BLOCK_WIDTH);
     } // end for
 }
 
@@ -209,17 +146,30 @@ void dma_descr_scan(unsigned int *s2mm_descr_vrt_addr, int num_descr) {
     unsigned int s2mm_descr_st = 0;
     off_t        offset_status;
     int          i;
+	clock_t start_time = clock();
+	off_t 		 buffer_addr = 0;
+
+	char cmplt = 0;
 
     for (i = 0; i < num_descr; i++) {
         offset_status = 0x40 * i;
-	s2mm_descr_st = dma_get(s2mm_descr_vrt_addr, STATUS + offset_status);
-	printf("%d) Descriptor Status: 0x%08x \r\n"
-		"\tCmplt: %x;\r\n"
-		"\tRXSOF: %x;\r\n"
-		"\tRXEOF: %x;\r\n"
-		"\tBFLEN: %d bytes;\r\n", i, s2mm_descr_st,
-		s2mm_descr_st & 0x80000000,  s2mm_descr_st & 0x8000000,
-		s2mm_descr_st & 0x4000000,   s2mm_descr_st & 0x7FFFFF);
+		s2mm_descr_st = dma_get(s2mm_descr_vrt_addr, STATUS + offset_status);
+
+		cmplt = s2mm_descr_st & 0x80000000;
+		buffer_addr = dma_get(s2mm_descr_vrt_addr, BUFFER_ADDRESS + offset_status);
+		
+
+		printf("%d) Descriptor Status: 0x%08x\r\n"
+			"\tBUFFER ADDR: 0x%08x;\r\n"
+			"\tCmplt: %x;"
+			"\tRXSOF: %x;\r\n"
+			"\tRXEOF: %x;"
+			"\tBFLEN: %d bytes;\r\n", 
+			i, s2mm_descr_st,  
+			buffer_addr, cmplt,  s2mm_descr_st & 0x8000000,
+			s2mm_descr_st & 0x4000000,   s2mm_descr_st & 0x7FFFFF
+			);
+				
     }
 }
 
@@ -244,7 +194,7 @@ void dma_reset(unsigned int *dma_vrt_address) {
  *
  * @return none;
  */
-static void dma_set(unsigned int *address, off_t offset, unsigned int value) {
+void dma_set(unsigned int *address, off_t offset, unsigned int value) {
     address[offset >> 2] = value;
 }
 
@@ -256,9 +206,115 @@ static void dma_set(unsigned int *address, off_t offset, unsigned int value) {
  *
  * @return Value which was read from address;
  */
-static int dma_get(unsigned int *address, off_t offset) {
+int dma_get(unsigned int *address, off_t offset) {
     return address[offset >> 2];
 }
+
+
+
+int main(void) {
+	int 	      fd;
+	int           num_descr    = 11;
+
+
+	printf("Please, enter number of descriptors: ");
+	scanf("%d", &num_descr);
+
+
+	fd = open("/dev/mem", O_RDWR | O_SYNC);
+	if (fd < 0) {
+		fprintf(stderr, "<E>: Couldn't open /dev/mem: %s\r\n", strerror(errno));		
+		exit(-1);
+	}
+
+	// Mapped memory from phy to virt for work with DMA without Linux drivers
+	unsigned int *axi_dma_vrt = mmap(NULL, DESCRIPTOR_REGISTERS_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, AXI_DMA_BASEADDR);
+	if (axi_dma_vrt == MAP_FAILED) {
+		fprintf(stderr, "<E>: Couldn't mapped memory for AXI DMA: %s\r\n", strerror(errno));
+		close(fd);
+		return -1;
+	}
+
+	// mapped memory for S2MM descriptors
+	unsigned int *s2mm_descr_reg_mmap = mmap(NULL, DESCRIPTOR_REGISTERS_SIZE,	PROT_READ | PROT_WRITE,	MAP_SHARED, fd,	HP0_S2MM_DMA_DESCRIPTORS_ADDRESS);
+
+	if (s2mm_descr_reg_mmap == MAP_FAILED) {
+		fprintf(stderr, "<E>: Couldn't mapped memory for AXI DMA: %s\r\n",
+				strerror(errno));
+		close(fd);
+		return -1;
+	}
+
+	unsigned int *dest_mem_map = mmap(NULL, DEST_MEM_BLOCK,	PROT_READ | PROT_WRITE, MAP_SHARED, fd,	(off_t) (HP0_S2MM_TARGET_MEM_ADDRESS));
+	
+	if (dest_mem_map == MAP_FAILED) {
+		fprintf(stderr, "<E>: Couldn't mapped memory for destination block: %s\r\n",
+				strerror(errno));
+		close(fd);
+		return -1;
+	}
+
+	//printf ("! dest_mem_map= 0x%08x\r\n", dest_mem_map);
+
+	// fill s2mm-register memory with zeros
+	memset(s2mm_descr_reg_mmap, 0, DESCRIPTOR_REGISTERS_SIZE);
+	memset(dest_mem_map, 0, DEST_MEM_BLOCK);
+
+	dma_reset(axi_dma_vrt);		// Reset AXI DMA
+
+	uint32_t s2mm_curr_descr_addr = HP0_S2MM_DMA_DESCRIPTORS_ADDRESS;
+	dma_descr_set(s2mm_descr_reg_mmap, num_descr);
+
+	uint32_t s2mm_tail_descr_addr = HP0_S2MM_DMA_DESCRIPTORS_ADDRESS + (num_descr * 0x40 - 0x40);
+
+	dma_set(axi_dma_vrt, S2MM_CURDESC,  s2mm_curr_descr_addr);
+	dma_set(axi_dma_vrt, S2MM_CONTROL_REGISTER, 0x01);
+	dma_set(axi_dma_vrt, S2MM_TAILDESC, s2mm_tail_descr_addr);
+
+	int ctrl_reg_ok = 0, s2mm_status, f_err = 0;
+	int cnt = 0;
+	while (!ctrl_reg_ok && !f_err && cnt < 3) {
+		s2mm_status = dma_get(axi_dma_vrt, S2MM_STATUS_REGISTER);
+		ctrl_reg_ok = (s2mm_status & 0x00001000);
+
+		printf("Stream to memory-mapped status (0x%08x@0x%02x):\n", s2mm_status, S2MM_STATUS_REGISTER);
+		printf("S2MM_STATUS_REGISTER status register values:\n");
+
+		if (s2mm_status & 0x00000001) printf(" HALTED");
+		else		    	          printf(" running");
+		if (s2mm_status & 0x00000002) printf(" idle");
+
+		if (s2mm_status & 0x00000008) printf(" SGIncld");
+
+
+		if (s2mm_status & 0x00000010) { printf(" DMAIntErr"); f_err = 1; }
+		if (s2mm_status & 0x00000020) { printf(" DMASlvErr"); f_err = 1; }
+		if (s2mm_status & 0x00000040) { printf(" DMADecErr"); f_err = 1; }
+		if (s2mm_status & 0x00000100) { printf(" SGIntErr"); f_err = 1; }
+		if (s2mm_status & 0x00000200) { printf(" SGSlvErr"); f_err = 1; }
+		if (s2mm_status & 0x00000400) { printf(" SGDecErr"); f_err = 1; }
+		if (s2mm_status & 0x00001000) { printf(" IOC_Irq"); f_err = 1; }
+		if (s2mm_status & 0x00002000) { printf(" Dly_Irq"); f_err = 1; }
+		if (s2mm_status & 0x00004000) { printf(" Err_Irq"); f_err = 1; }
+		printf("\n");
+		
+		dma_descr_scan(s2mm_descr_reg_mmap, num_descr);
+		cnt ++;
+
+
+		print_mem(dest_mem_map, 32);
+	}
+
+	munmap(axi_dma_vrt,  DESCRIPTOR_REGISTERS_SIZE);
+	munmap(s2mm_descr_reg_mmap, DESCRIPTOR_REGISTERS_SIZE);
+	munmap(dest_mem_map, DEST_MEM_BLOCK);
+
+	close(fd);
+
+	return 0;
+}
+
+
 
 
 

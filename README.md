@@ -87,3 +87,5 @@ We can see increment counter from datasource of FPGA
 
 Vivado blockdesign:
 ![image](https://user-images.githubusercontent.com/2908600/219812215-5c07d015-7dae-495d-91a6-dd16068c52da.png)
+
+axi_mem_intercon3 can be removed as it is not necessary
